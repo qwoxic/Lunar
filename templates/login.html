@@ -1,1 +1,18 @@
-
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>Lunar - Вход</title>
+</head>
+<body>
+    <div class="auth-card">
+        <h2 style="text-align: center;">Lunar</h2>
+        <form method="POST">
+            <input name="username" placeholder="Никнейм" required>
+            <input name="password" type="password" placeholder="Пароль" required>
+            <button type="submit">Войти</button>
+        </form>
+        <a href="{{ url_for('register') }}">Создать аккаунт</a>
+    </div>
+</body>
+</html>
