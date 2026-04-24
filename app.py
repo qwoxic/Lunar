@@ -36,7 +36,7 @@ def register():
         display_name = request.form.get('display_name')
         password = request.form.get('password')
         
-        pw_hash = generate_password_hash(password) # сократил переменную
+        pw_hash = generate_password_hash(password)
         new_user = User(username=username, display_name=display_name, password_hash=pw_hash)
         
         db.session.add(new_user)
