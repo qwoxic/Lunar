@@ -1,13 +1,82 @@
 <!DOCTYPE html>
-<html>
-<head>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body>
-    <div style="text-align: center;">
-        <h1>Добро пожаловать, {{ user }}</h1>
-        <p>Мессенджер Lunar в разработке...</p>
-        <a href="{{ url_for('logout') }}">Выйти</a>
+<title>Lunar</title>
+<style>
+    body { margin: 0; display: flex; height: 100vh; font: 14px sans-serif; background: #0b0e11; color: #fff; }
+    aside { width: 260px; background: #15191c; border-right: 1px solid #2d3339; display: flex; flex-direction: column; }
+    form, .head { padding: 15px; border-bottom: 1px solid #2d3339; }
+    input { width: 100%; padding: 8px; background: #2d3339; border: none; color: #fff; border-radius: 4px; box-sizing: border-box; }
+    .list { flex: 1; overflow-y: auto; }
+    .item { padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1c2126; text-decoration: none; color: inherit; }
+    .item:hover { background: #1c2126; }
+    a { text-decoration: none; font-size: 11px; }
+    .add { color: #00a884; }
+    .del { color: #ff4b4b; }
+    main { flex: 1; display: flex; flex-direction: column; }
+    .empty, .dev { margin: auto; text-align: center; color: #555; }
+    small { color: #888; display: block; }
+    .chat-head { padding: 10px 15px; border-bottom: 1px solid #2d3339; background: #0b0e11; display: flex; align-items: center; }
+    .avatar { 
+        width: 32px; height: 32px; background: #3d444b; color: #fff; 
+        border-radius: 50%; display: flex; align-items: center; 
+        justify-content: center; font-weight: bold; margin-right: 10px;
+        text-transform: uppercase; flex-shrink: 0;
+    }
+    .head .avatar { width: 28px; height: 28px; font-size: 12px; }
+</style>
+
+<aside>
+    <div class="head" style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center;">
+            <div class="avatar">{{ me.display_name[0] }}</div>
+            <b>{{ me.display_name }}</b>
+        </div>
+        <a href="/logout" class="del">Выход</a>
     </div>
-</body>
-</html>
+    <form action="/">
+        <input name="q" placeholder="Поиск..." autocomplete="off">
+    </form>
+    <div class="list">
+        {% if res %}
+            <p style="padding: 0 15px; color: #00a884; font-size: 10px">НАЙДЕНО</p>
+            {% for r in res %}
+                <div class="item">
+                    <div style="display: flex; align-items: center;">
+                        <div class="avatar" style="background: #2d3339;">{{ r.display_name[0] }}</div>
+                        <span>{{ r.display_name }}<br><small>@{{ r.username }}</small></span>
+                    </div>
+                    <a href="/add/{{ r.id }}" class="add">Добавить</a>
+                </div>
+            {% endfor %}
+        {% endif %}
+        <p style="padding: 0 15px; color: #555; font-size: 10px">КОНТАКТЫ</p>
+        {% for c in me.contacts %}
+            <a href="/?chat={{ c.id }}" class="item">
+                <div style="display: flex; align-items: center;">
+                    <div class="avatar">{{ c.display_name[0] }}</div>
+                    <span>{{ c.display_name }}<br><small>@{{ c.username }}</small></span>
+                </div>
+                <object><a href="/del/{{ c.id }}" class="del">Удалить</a></object>
+            </a>
+        {% else %}
+            <p style="padding: 15px; color: #333">Список пуст</p>
+        {% endfor %}
+    </div>
+</aside>
+
+<main>
+    {% if other %}
+        <div class="chat-head">
+            <div class="avatar" style="background: #00a884;">{{ other.display_name[0] }}</div>
+            <b>{{ other.display_name }}</b>
+        </div>
+        <div class="dev">
+            <h2 style="color: #fff">Lunar</h2>
+            <p>Чат с @{{ other.username }} в разработке...</p>
+        </div>
+    {% else %}
+        <div class="empty">
+            <h2 style="color: #fff">Lunar</h2>
+            <p>Выберите контакт для начала общения</p>
+        </div>
+    {% endif %}
+</main>
