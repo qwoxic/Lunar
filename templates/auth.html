@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <link href="https://jsdelivr.net" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="auth-wrapper">
+    <div class="auth-card">
+        <h2>LUNAR</h2>
+        <form method="post">
+            <input type="text" name="u" placeholder="Никнейм" required>
+            {% if mode == 'reg' %}
+            <input type="text" name="d" placeholder="Имя в чате" required>
+            {% endif %}
+            <input type="password" name="p" placeholder="Пароль" required>
+            <button type="submit">{{ 'ВОЙТИ' if mode == 'login' else 'РЕГИСТРАЦИЯ' }}</button>
+        </form>
+        <div style="margin-top: 20px;">
+            <a href="{{ '/register' if mode == 'login' else '/login' }}" style="color: var(--text-dim); text-decoration: none; font-size: 13px;">
+                {{ 'Создать аккаунт' if mode == 'login' else 'Уже есть аккаунт? Войти' }}
+            </a>
+        </div>
+    </div>
+</body>
+</html>
