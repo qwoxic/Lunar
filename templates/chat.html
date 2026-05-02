@@ -1,82 +1,111 @@
 <!DOCTYPE html>
-<title>Lunar</title>
-<style>
-    body { margin: 0; display: flex; height: 100vh; font: 14px sans-serif; background: #0b0e11; color: #fff; }
-    aside { width: 260px; background: #15191c; border-right: 1px solid #2d3339; display: flex; flex-direction: column; }
-    form, .head { padding: 15px; border-bottom: 1px solid #2d3339; }
-    input { width: 100%; padding: 8px; background: #2d3339; border: none; color: #fff; border-radius: 4px; box-sizing: border-box; }
-    .list { flex: 1; overflow-y: auto; }
-    .item { padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1c2126; text-decoration: none; color: inherit; }
-    .item:hover { background: #1c2126; }
-    a { text-decoration: none; font-size: 11px; }
-    .add { color: #00a884; }
-    .del { color: #ff4b4b; }
-    main { flex: 1; display: flex; flex-direction: column; }
-    .empty, .dev { margin: auto; text-align: center; color: #555; }
-    small { color: #888; display: block; }
-    .chat-head { padding: 10px 15px; border-bottom: 1px solid #2d3339; background: #0b0e11; display: flex; align-items: center; }
-    .avatar { 
-        width: 32px; height: 32px; background: #3d444b; color: #fff; 
-        border-radius: 50%; display: flex; align-items: center; 
-        justify-content: center; font-weight: bold; margin-right: 10px;
-        text-transform: uppercase; flex-shrink: 0;
-    }
-    .head .avatar { width: 28px; height: 28px; font-size: 12px; }
-</style>
-
-<aside>
-    <div class="head" style="display: flex; align-items: center; justify-content: space-between;">
-        <div style="display: flex; align-items: center;">
-            <div class="avatar">{{ me.display_name[0] }}</div>
-            <b>{{ me.display_name }}</b>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://jsdelivr.net" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="search-wrap">
+            <form action="/" method="get">
+                <input type="text" name="search" placeholder="Поиск по нику..." autocomplete="off">
+            </form>
         </div>
-        <a href="/logout" class="del">Выход</a>
+        <div class="contacts">
+            {% for item in chats %}
+            <a href="/?search={{item.user.username}}" class="contact-link">
+                <div class="avatar-circle">
+                    {% if item.user.avatar %}
+                        <img src="/static/uploads/{{item.user.avatar}}" class="av-img">
+                    {% else %}
+                        {{ item.user.display_name[0]|upper }}
+                    {% endif %}
+                </div>
+                <span style="flex: 1;">{{ item.user.display_name }}</span>
+                {% if item.unread > 0 %}
+                    <div class="unread-badge">{{ item.unread }}</div>
+                {% endif %}
+            </a>
+            {% endfor %}
+        </div>
+        <div class="user-panel">
+            <form action="/set_avatar" method="post" enctype="multipart/form-data" id="av_form">
+                <input type="file" name="avatar" id="av_input" style="display:none" onchange="document.getElementById('av_form').submit()">
+                <span onclick="document.getElementById('av_input').click()" class="av-btn">Сменить аватар</span>
+            </form>
+            <a href="/logout" class="logout-btn">Выйти</a>
+        </div>
     </div>
-    <form action="/">
-        <input name="q" placeholder="Поиск..." autocomplete="off">
-    </form>
-    <div class="list">
-        {% if res %}
-            <p style="padding: 0 15px; color: #00a884; font-size: 10px">НАЙДЕНО</p>
-            {% for r in res %}
-                <div class="item">
-                    <div style="display: flex; align-items: center;">
-                        <div class="avatar" style="background: #2d3339;">{{ r.display_name[0] }}</div>
-                        <span>{{ r.display_name }}<br><small>@{{ r.username }}</small></span>
-                    </div>
-                    <a href="/add/{{ r.id }}" class="add">Добавить</a>
+
+    <div class="view-main">
+        {% if recipient %}
+        <div class="header-chat">{{ recipient.display_name }}</div>
+        <div class="chat-viewport" id="flow">
+            {% set last_date = namespace(value='') %}
+            {% for m in msgs %}
+                {% set current_date = format_date(m.timestamp) %}
+                {% if current_date != last_date.value %}
+                    <div class="date-divider">{{ current_date }}</div>
+                    {% set last_date.value = current_date %}
+                {% endif %}
+                <div class="bubble {{'my' if m.sender_id == user.id else 'other'}}">
+                    {% if m.file_path %}
+                        <a href="/static/uploads/{{m.file_path}}" style="color: #fff;">📎 {{ m.content }}</a>
+                    {% else %}
+                        {{ m.content }}
+                    {% endif %}
+                    <span class="t-meta">{{ m.timestamp.strftime('%H:%M') }}</span>
                 </div>
             {% endfor %}
-        {% endif %}
-        <p style="padding: 0 15px; color: #555; font-size: 10px">КОНТАКТЫ</p>
-        {% for c in me.contacts %}
-            <a href="/?chat={{ c.id }}" class="item">
-                <div style="display: flex; align-items: center;">
-                    <div class="avatar">{{ c.display_name[0] }}</div>
-                    <span>{{ c.display_name }}<br><small>@{{ c.username }}</small></span>
-                </div>
-                <object><a href="/del/{{ c.id }}" class="del">Удалить</a></object>
-            </a>
-        {% else %}
-            <p style="padding: 15px; color: #333">Список пуст</p>
-        {% endfor %}
-    </div>
-</aside>
+        </div>
+        <div class="input-bar">
+            <form action="/upload" method="post" enctype="multipart/form-data" id="up_form">
+                <input type="hidden" name="rid" value="{{ recipient.id }}">
+                <input type="file" name="file" id="f_up" style="display:none" onchange="this.form.submit()">
+                <button type="button" class="btn-icon" onclick="document.getElementById('f_up').click()">+</button>
+            </form>
+            <input type="text" id="msg_in" placeholder="Сообщение..." autocomplete="off">
+            <button class="btn-icon send" id="send_btn">➤</button>
+        </div>
+        <script>
+            const socket = io();
+            const box = document.getElementById('flow');
+            const input = document.getElementById('msg_in');
+            const btn = document.getElementById('send_btn');
+            let lastMsg = '';
 
-<main>
-    {% if other %}
-        <div class="chat-head">
-            <div class="avatar" style="background: #00a884;">{{ other.display_name[0] }}</div>
-            <b>{{ other.display_name }}</b>
-        </div>
-        <div class="dev">
-            <h2 style="color: #fff">Lunar</h2>
-            <p>Чат с @{{ other.username }} в разработке...</p>
-        </div>
-    {% else %}
-        <div class="empty">
-            <h2 style="color: #fff">Lunar</h2>
-            <p>Выберите контакт для начала общения</p>
-        </div>
-    {% endif %}
-</main>
+            socket.emit('join', {rid: "{{ recipient.id }}"});
+            box.scrollTop = box.scrollHeight;
+
+            function send() {
+                let msg = input.value.trim();
+                if (msg !== '') {
+                    lastMsg = msg;
+                    socket.emit('send', {msg: msg, rid: "{{ recipient.id }}"});
+                    input.value = '';
+                }
+            }
+
+            btn.onclick = send;
+            input.onkeydown = function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); send(); }
+                if (e.key === 'ArrowUp' && input.value === '') input.value = lastMsg;
+            };
+
+            socket.on('new', (d) => {
+                const el = document.createElement('div');
+                el.className = 'bubble ' + (d.sid == "{{ user.id }}" ? 'my' : 'other');
+                el.innerHTML = d.msg + ' <span class="t-meta">' + d.t + '</span>';
+                box.appendChild(el);
+                box.scrollTo({top: box.scrollHeight, behavior: 'smooth'});
+            });
+        </script>
+        {% else %}
+        <div style="margin: auto; color: var(--text-dim);">Выберите чат</div>
+        {% endif %}
+    </div>
+</body>
+</html>
