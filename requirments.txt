@@ -1,3 +1,7 @@
-flask
-flask-sqlalchemy
-werkzeug
+Flask
+Flask-SQLAlchemy
+Flask-SocketIO
+Werkzeug
+python-socketio
+eventlet
+pytz
