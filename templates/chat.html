@@ -2,110 +2,155 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://jsdelivr.net" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
     <div class="sidebar">
         <div class="search-wrap">
-            <form action="/" method="get">
-                <input type="text" name="search" placeholder="Поиск по нику..." autocomplete="off">
+            <form action="/" method="get" id="searchForm">
+                <input type="text" name="search" placeholder="Никнейм..." autocomplete="off" id="searchInput">
             </form>
         </div>
         <div class="contacts">
             {% for item in chats %}
             <a href="/?search={{item.user.username}}" class="contact-link">
                 <div class="avatar-circle">
-                    {% if item.user.avatar %}
-                        <img src="/static/uploads/{{item.user.avatar}}" class="av-img">
-                    {% else %}
-                        {{ item.user.display_name[0]|upper }}
-                    {% endif %}
+                    {% if item.user.avatar %}<img src="/static/uploads/{{item.user.avatar}}" class="av-img">
+                    {% else %}{{ item.user.display_name[0]|upper }}{% endif %}
                 </div>
-                <span style="flex: 1;">{{ item.user.display_name }}</span>
-                {% if item.unread > 0 %}
-                    <div class="unread-badge">{{ item.unread }}</div>
-                {% endif %}
+                <div style="flex:1;">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        {{ item.user.display_name }}
+                        <span id="st-{{item.user.id}}" style="font-size:10px; color:{{ '#00ff00' if item.user.is_online else '#707579' }}">●</span>
+                    </div>
+                </div>
+                {% if item.unread > 0 %}<div class="unread-badge">{{ item.unread }}</div>{% endif %}
             </a>
             {% endfor %}
         </div>
         <div class="user-panel">
-            <form action="/set_avatar" method="post" enctype="multipart/form-data" id="av_form">
-                <input type="file" name="avatar" id="av_input" style="display:none" onchange="document.getElementById('av_form').submit()">
-                <span onclick="document.getElementById('av_input').click()" class="av-btn">Сменить аватар</span>
-            </form>
+            <span class="av-btn" onclick="toggleSet()">Профиль</span>
             <a href="/logout" class="logout-btn">Выйти</a>
         </div>
     </div>
 
     <div class="view-main">
         {% if recipient %}
-        <div class="header-chat">{{ recipient.display_name }}</div>
+        <div class="header-chat">
+            {{ recipient.display_name }}
+            <span id="tp-box" style="font-size:11px; color:var(--accent); margin-left:10px;"></span>
+        </div>
         <div class="chat-viewport" id="flow">
-            {% set last_date = namespace(value='') %}
+            {% set d_log = namespace(last='') %}
             {% for m in msgs %}
-                {% set current_date = format_date(m.timestamp) %}
-                {% if current_date != last_date.value %}
-                    <div class="date-divider">{{ current_date }}</div>
-                    {% set last_date.value = current_date %}
+                {% set d_cur = format_date(m.timestamp) %}
+                {% if d_cur != d_log.last %}
+                    <div class="date-divider">{{ d_cur }}</div>
+                    {% set d_log.last = d_cur %}
                 {% endif %}
-                <div class="bubble {{'my' if m.sender_id == user.id else 'other'}}">
-                    {% if m.file_path %}
-                        <a href="/static/uploads/{{m.file_path}}" style="color: #fff;">📎 {{ m.content }}</a>
+                <div class="bubble {{'my' if m.sender_id == user.id else 'other'}}" data-mid="{{m.id}}">
+                    {% if m.file_name %}
+                        <a href="/download/{{m.id}}" target="_blank" style="color:inherit; text-decoration:underline;">{{ m.file_name }}</a>
                     {% else %}
-                        {{ m.content }}
+                        <span class="txt">{{ m.content }}</span>
                     {% endif %}
-                    <span class="t-meta">{{ m.timestamp.strftime('%H:%M') }}</span>
+                    <span class="t-meta">
+                        {{ m.timestamp.strftime('%H:%M') }}
+                        {% if m.sender_id == user.id %}
+                            <span id="ch-{{m.id}}" class="check" style="margin-left:6px;">{{ '✓✓' if m.is_read else '✓' }}</span>
+                        {% endif %}
+                    </span>
                 </div>
             {% endfor %}
         </div>
         <div class="input-bar">
-            <form action="/upload" method="post" enctype="multipart/form-data" id="up_form">
-                <input type="hidden" name="rid" value="{{ recipient.id }}">
-                <input type="file" name="file" id="f_up" style="display:none" onchange="this.form.submit()">
-                <button type="button" class="btn-icon" onclick="document.getElementById('f_up').click()">+</button>
-            </form>
-            <input type="text" id="msg_in" placeholder="Сообщение..." autocomplete="off">
-            <button class="btn-icon send" id="send_btn">➤</button>
+            <input type="file" id="fileInput" style="display:none;">
+            <button class="btn-icon" id="attachBtn">+</button>
+            <input type="text" id="inp" placeholder="Напишите..." autocomplete="off">
+            <button class="btn-icon send" id="s-btn">➤</button>
         </div>
+
         <script>
-            const socket = io();
-            const box = document.getElementById('flow');
-            const input = document.getElementById('msg_in');
-            const btn = document.getElementById('send_btn');
-            let lastMsg = '';
+            const s=io(), f=document.getElementById('flow'), i=document.getElementById('inp'), rid="{{ recipient.id }}", uid="{{ user.id }}";
+            let lm='', tt;
+            const mark=()=>{ if(rid) fetch('/mark_read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sender_id:rid})}); };
+            const send=()=>{ let t=i.value.trim(); if(!t)return; s.emit('send',{msg:t,rid}); lm=t; i.value=''; s.emit('typing',{rid,state:0}); };
+            const esc=t=>Object.assign(document.createElement('div'),{textContent:t}).innerHTML;
 
-            socket.emit('join', {rid: "{{ recipient.id }}"});
-            box.scrollTop = box.scrollHeight;
+            if(f){ f.scrollTop=f.scrollHeight; s.emit('join',{rid}); mark(); }
 
-            function send() {
-                let msg = input.value.trim();
-                if (msg !== '') {
-                    lastMsg = msg;
-                    socket.emit('send', {msg: msg, rid: "{{ recipient.id }}"});
-                    input.value = '';
+            i.oninput=()=>{ s.emit('typing',{rid,state:1}); clearTimeout(tt); tt=setTimeout(()=>s.emit('typing',{rid,state:0}),2000); };
+            i.onkeyup=e=>{ if(e.key==='Enter')send(); if(e.key==='ArrowUp'&&!i.value)i.value=lm; if(e.key==='Escape')i.blur(); };
+            document.getElementById('s-btn').onclick=send;
+
+            s.on('new',d=>{
+                let m=document.createElement('div'), mine=d.sid==uid;
+                m.className=`bubble ${mine?'my':'other'}`; m.setAttribute('data-mid',d.mid);
+                if(d.file){
+                    m.innerHTML=`<a href="/download/${d.mid}" target="_blank" style="color:inherit; text-decoration:underline;">${esc(d.file)}</a><span class="t-meta">${d.t}${mine?`<span id="ch-${d.mid}" class="check" style="margin-left:6px;">✓</span>`:''}</span>`;
+                } else {
+                    m.innerHTML=`<span class="txt">${esc(d.msg)}</span><span class="t-meta">${d.t}${mine?`<span id="ch-${d.mid}" class="check" style="margin-left:6px;">✓</span>`:''}</span>`;
                 }
-            }
+                f.appendChild(m); f.scrollTo({top:f.scrollHeight,behavior:'smooth'});
+                if(!mine)mark();
+            });
 
-            btn.onclick = send;
-            input.onkeydown = function(e) {
-                if (e.key === 'Enter') { e.preventDefault(); send(); }
-                if (e.key === 'ArrowUp' && input.value === '') input.value = lastMsg;
+            s.on('msg_read',d=>{
+                document.querySelectorAll('.check').forEach(el=>{
+                    if(el.id && el.id.startsWith('ch-')) el.innerText='✓✓';
+                });
+            });
+
+            s.on('is_tp',d=>{ let box=document.getElementById('tp-box'); if(box) box.innerText=d.state?'печатает...':''; });
+            s.on('st_ch',d=>{ let el=document.getElementById(`st-${d.uid}`); if(el) el.style.color=d.on?'#00ff00':'#707579'; });
+            s.on('m_del',d=>{ let m=document.querySelector(`.bubble[data-mid="${d.mid}"]`); if(m && m.classList.contains('my')){ m.innerHTML='<i style="opacity:0.4;">Удалено</i>'; m.removeAttribute('data-mid'); } });
+
+            if(f) f.oncontextmenu=e=>{
+                let b=e.target.closest('.bubble.my');
+                if(b){
+                    e.preventDefault();
+                    let mid = b.getAttribute('data-mid');
+                    if(mid && confirm('Удалить сообщение?')){
+                        s.emit('del_all',{mid:parseInt(mid)});
+                    }
+                }
             };
 
-            socket.on('new', (d) => {
-                const el = document.createElement('div');
-                el.className = 'bubble ' + (d.sid == "{{ user.id }}" ? 'my' : 'other');
-                el.innerHTML = d.msg + ' <span class="t-meta">' + d.t + '</span>';
-                box.appendChild(el);
-                box.scrollTo({top: box.scrollHeight, behavior: 'smooth'});
-            });
+            let st; document.getElementById('searchInput').oninput=e=>{clearTimeout(st); st=setTimeout(()=>e.target.form.submit(),500);};
+            window.toggleSet=()=>{let m=document.getElementById('p-m'); if(m) m.style.display=m.style.display==='flex'?'none':'flex';};
+
+            const fileInput = document.getElementById('fileInput');
+            const attachBtn = document.getElementById('attachBtn');
+            attachBtn.onclick = () => fileInput.click();
+            fileInput.onchange = () => {
+                const file = fileInput.files[0];
+                if(!file) return;
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    s.emit('send_file', {
+                        rid: rid,
+                        name: file.name,
+                        data: e.target.result
+                    });
+                    fileInput.value = '';
+                };
+                reader.readAsDataURL(file);
+            };
         </script>
         {% else %}
-        <div style="margin: auto; color: var(--text-dim);">Выберите чат</div>
+        <div style="margin:auto; text-align:center; color:var(--text-dim);"><h2>LUNAR</h2><p style="font-size:13px;">Найди друга по нику</p></div>
         {% endif %}
+    </div>
+
+    <div id="p-m" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:100; align-items:center; justify-content:center;">
+        <div style="background:var(--bg-panel); padding:30px; border-radius:15px; border:1px solid var(--border);">
+            <form action="/set_avatar" method="post" enctype="multipart/form-data">
+                <input type="file" name="avatar">
+                <button type="submit">ОК</button>
+                <button type="button" onclick="toggleSet()">ОТМЕНА</button>
+            </form>
+        </div>
     </div>
 </body>
 </html>
